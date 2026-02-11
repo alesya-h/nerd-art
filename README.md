@@ -1,5 +1,29 @@
 # nerd-art
 
+```
+            _▂▃▃▃▃▃▃▄▄▄▄▄▄▃▃▃▃▃▂                          _▂▃▃▃▃▄▄▄▄▄▄▃▃▃▃▃▃▂             
+      _▗▄▟▆▆▆███████████████████▆▆▙▄▄▖▂_          _▂▗▄▄▟▆▆███████████████████▆▆▆▄▄▖       
+      ▐██▀▀▀████▀▘""          """▝▀████▊▅▅▃▃▃▃▃▃▅▅▆████▀▀""" -uc     /Z""▀████▀▀▀██▎      
+      ▐██▊▅██▛▀   ~-    _`__ _'-▏ _+"▜█████████▊████▛▏ l   ~  -h x^_       d██▊▅███▎      
+       ▝▀████▍[  ▏/ /  Li   ` ,▗ _"[" ██████████████  `._  ╲`[/╲╲~▝<   '(   ▐████▀▘       
+         ▜██▊▘.=  ~v$/   <  ▏ /Ju  v  "█▊█▀   ▝▀███▀   .▗/▏ .+u▏ ~=   .[u  `▝███▀         
+          ▐█▋____ ▏_= ▏▏j-___▏_=-▏ <  ▂██▀      ▜██▅_ F)_-= '2_▏▏_T-__▏"|_ ^,██▍          
+          ▐██▍j[_ ▏.[/ `ij%" ``_ ▏▏j`_███▎      J███▖_,_[__  '_ `▏_(   `(_╱`▐█▊▍          
+          ▝██▍ [  >/[   .. `   u ▏`` ▐█▊▘        ▝██▍ =.v  ~. < r1x  ~ `.   ▐█▋           
+            ██▎`  ~N   "P /▘_YK J ~ ▃██▘          "██▎~ -  ▏`_ _h'%   _L-u ▐██▘           
+            ▜██▂_ `▂_  `[[╱_▏j▂" _[▄██▎            `██▄ __ ▂ {╲"_?▂_╲▏▂_{ ▂██▍            
+            /▜██▅▏ ,`  ▏``u ▏>.u ▃▆█▊▘              ▝██▅▃  ╱,v `  [╲mhs.▗▟██▌             
+              ▀▛██▄▃▃▂▂ .=n▂▂▂▃▄██▛▀                  ▀▊█▙▄▃▃▂▂ =*=▂▂▃▃▄█▊▛▘              
+                ▝▀▀▜███▆▆▆▆███▊▀▀`                      [▀▀████▆▆▆▆███▛▀▀╲                
+                       "▀▀▀▘                                   "▀▀▘▏                      
+                                          J▆▆                            _▃               
+           ▃▃▖▃▃▃▃   _▃▃▃▃   ▃▃▃▏▂▃▃▏ _▃▃▃▐██          _▃▃▃▃   ▗▃▃ ▂▃▃  ▃▟█▃▃▏            
+           ██▛▀▀▜█▌ ▗█▛▘▝▜█▖ "▜█▅▛▜█ ▗██▀▀▜██  _▂▂▂▂_  [` `▜▋   `█▅▘`▛   ▐█ `             
+           ██▍  ▐█▋ ██▊MM▜▀▋  ▐██ [` ▐█▋  ▐██  "▀▀▀▀▘  ▗▅M▀▜▋    ▆▎      ▐█               
+           ██▍  ▐█▋ ▝▊▙▃▃▃▄_ ▃▟██▃▖  ▝██▄▃▟██          █▖ _▟▋    █▎      ▝█▂ _            
+           ▀▀▘  ▝▀▘  `▀▀▀▀▘` ▀▀▀▀▀▘   `▀▀▀`▀▀          ▝▀▀▀`▀▘ ▝▀▀▀▀▏     "▀▀▀            
+```
+
 An image-to-Unicode-art converter that transforms raster images into text artwork using glyphs from the [Nerd Fonts](https://www.nerdfonts.com/) character set. Instead of basic ASCII characters like `#` and `.`, it uses block elements, braille patterns, sextants, wedges, and other geometric Unicode symbols to produce high-fidelity monochrome representations suitable for any Nerd Font-enabled terminal.
 
 **Try it in your browser:** <https://alesya-h.github.io/nerd-art/>

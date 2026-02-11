@@ -58,7 +58,7 @@ const GLYPH_GROUPS = [
   },
 
   {
-    id: "sextants", label: "Sextants", ambiguous: false, defaultOn: true,
+    id: "sextants", label: "Sextants", ambiguous: true, defaultOn: true,
     glyphs() {
       const g = [];
       for (let i = 0x1FB00; i <= 0x1FB3B; i++) g.push(String.fromCodePoint(i));
@@ -66,7 +66,7 @@ const GLYPH_GROUPS = [
     }
   },
   {
-    id: "wedges", label: "Wedges", ambiguous: false, defaultOn: true,
+    id: "wedges", label: "Wedges", ambiguous: true, defaultOn: true,
     glyphs() {
       const g = [];
       for (let i = 0x1FB3C; i <= 0x1FB6F; i++) g.push(String.fromCodePoint(i));
