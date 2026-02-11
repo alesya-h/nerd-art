@@ -6,11 +6,18 @@ const OUTPUT_COLS = parseInt(params.get("cols")) || 80;
 const DITHER = params.get("dither") !== "false";
 const IMAGE_PATH = decodeURIComponent(params.get("image"));
 
-const FONT = "16px monospace";
-const CELL_W = 10;  // approximate monospace cell width at 16px
-const CELL_H = 20;  // approximate monospace cell height at 16px
 const GRID_COLS = 4; // sub-cell grid columns
 const GRID_ROWS = 8; // sub-cell grid rows
+
+// Measurement resolution: render glyphs at high res so each sub-cell
+// averages over MEASURE_SCALE² pixels (all sub-cells equal size).
+const MEASURE_SCALE = 8;
+const MEASURE_W = GRID_COLS * MEASURE_SCALE; // 32 px
+const MEASURE_H = GRID_ROWS * MEASURE_SCALE; // 64 px
+const MEASURE_FONT = `${MEASURE_H}px monospace`;
+
+// Terminal cell aspect ratio (width:height).
+const CELL_ASPECT = 0.5;
 
 // ── Glyph catalog ──────────────────────────────────────────────────
 // Every candidate character that we will measure for its actual ink
@@ -76,50 +83,49 @@ function buildGlyphCatalog() {
 
 function measureGlyphs(glyphs) {
   const canvas = document.getElementById("glyphCanvas");
-  canvas.width = CELL_W;
-  canvas.height = CELL_H;
+  canvas.width = MEASURE_W;
+  canvas.height = MEASURE_H;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
   const results = [];
-  const subW = CELL_W / GRID_COLS;
-  const subH = CELL_H / GRID_ROWS;
+  const samplesPerCell = MEASURE_SCALE * MEASURE_SCALE;
 
   for (const glyph of glyphs) {
     // Clear to white (background)
     ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, CELL_W, CELL_H);
+    ctx.fillRect(0, 0, MEASURE_W, MEASURE_H);
 
-    // Draw glyph in black
+    // Draw glyph in black at high resolution
     ctx.fillStyle = "#000";
-    ctx.font = FONT;
+    ctx.font = MEASURE_FONT;
     ctx.textBaseline = "alphabetic";
-    const baseline = Math.round(CELL_H * 0.8);
-    ctx.fillText(glyph, 0, baseline);
+    ctx.fillText(glyph, 0, Math.round(MEASURE_H * 0.8));
 
-    const imageData = ctx.getImageData(0, 0, CELL_W, CELL_H);
+    const imageData = ctx.getImageData(0, 0, MEASURE_W, MEASURE_H);
     const pixels = imageData.data;
 
-    // Compute sub-grid densities (0 = white/empty, 1 = black/full ink)
+    // Average pixel ink within each sub-cell.
+    // Sub-cell (gx, gy) spans exactly MEASURE_SCALE × MEASURE_SCALE pixels,
+    // so every sub-cell averages the same number of samples.
     const grid = new Float32Array(GRID_COLS * GRID_ROWS);
     let totalInk = 0;
 
     for (let gy = 0; gy < GRID_ROWS; gy++) {
+      const y0 = gy * MEASURE_SCALE;
       for (let gx = 0; gx < GRID_COLS; gx++) {
-        const x0 = Math.round(gx * subW);
-        const y0 = Math.round(gy * subH);
-        const x1 = Math.round((gx + 1) * subW);
-        const y1 = Math.round((gy + 1) * subH);
+        const x0 = gx * MEASURE_SCALE;
         let sum = 0;
-        let count = 0;
-        for (let y = y0; y < y1; y++) {
-          for (let x = x0; x < x1; x++) {
-            const idx = (y * CELL_W + x) * 4;
-            const lum = (pixels[idx] * 0.299 + pixels[idx+1] * 0.587 + pixels[idx+2] * 0.114) / 255;
-            sum += (1 - lum); // invert: 1=ink, 0=empty
-            count++;
+        for (let dy = 0; dy < MEASURE_SCALE; dy++) {
+          const rowOff = (y0 + dy) * MEASURE_W;
+          for (let dx = 0; dx < MEASURE_SCALE; dx++) {
+            const idx = (rowOff + x0 + dx) * 4;
+            const lum = (pixels[idx] * 0.299 +
+                         pixels[idx+1] * 0.587 +
+                         pixels[idx+2] * 0.114) / 255;
+            sum += 1 - lum; // invert: 1=ink, 0=empty
           }
         }
-        const density = count > 0 ? sum / count : 0;
+        const density = sum / samplesPerCell;
         grid[gy * GRID_COLS + gx] = density;
         totalInk += density;
       }
@@ -257,8 +263,7 @@ async function main() {
     // Phase 2: Load and convert the image
     const img = new Image();
     img.onload = () => {
-      const aspect = CELL_W / CELL_H; // terminal char aspect ratio
-      const outputRows = Math.round((img.height / img.width) * OUTPUT_COLS * aspect);
+      const outputRows = Math.round((img.height / img.width) * OUTPUT_COLS * CELL_ASPECT);
 
       const imgCanvas = document.getElementById("imgCanvas");
       const renderW = OUTPUT_COLS * GRID_COLS;
