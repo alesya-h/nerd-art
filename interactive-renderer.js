@@ -26,7 +26,7 @@ const GLYPH_GROUPS = [
   {
     id: "blocks", label: "Blocks", ambiguous: false, defaultOn: true,
     glyphs() {
-      const g = [" ", "\u2588"]; // space + full block
+      const g = ["\u2588"]; // full block
       for (let i = 0x2581; i <= 0x2587; i++) g.push(String.fromCodePoint(i)); // lower 1/8–7/8
       for (let i = 0x2589; i <= 0x258F; i++) g.push(String.fromCodePoint(i)); // left 7/8–1/8
       g.push("\u2580", "\u2584", "\u258C", "\u2590"); // half blocks
@@ -112,8 +112,8 @@ const GLYPH_GROUPS = [
 ];
 
 function buildGlyphCatalog(enabledGroups) {
-  const glyphs = [];
-  const seen = new Set();
+  const glyphs = [" "]; // space is always included
+  const seen = new Set([" "]);
   for (const group of GLYPH_GROUPS) {
     if (!enabledGroups.has(group.id)) continue;
     for (const g of group.glyphs()) {
@@ -187,7 +187,7 @@ function deduplicateGlyphs(measured) {
 }
 
 // ── Image → art conversion ──────────────────────────────────────────
-function convertImage(imgData, imgW, imgH, rawImgData, measuredGlyphs, outputCols, outputRows, contrast, lightness, dither) {
+function convertImage(imgData, imgW, imgH, rawImgData, measuredGlyphs, outputCols, outputRows, contrast, lightness, invert, dither) {
   const totalGridW = outputCols * GRID_COLS;
   const totalGridH = outputRows * GRID_ROWS;
   const lumGrid = new Float32Array(totalGridW * totalGridH);
@@ -205,6 +205,14 @@ function convertImage(imgData, imgW, imgH, rawImgData, measuredGlyphs, outputCol
       lumGrid[y * totalGridW + x] = 1 - lum;
       // Sample alpha from the raw (pre-white-fill) image data
       alphaGrid[y * totalGridW + x] = rawImgData[idx + 3] / 255;
+    }
+  }
+
+  if (invert) {
+    for (let i = 0; i < lumGrid.length; i++) {
+      if (alphaGrid[i] > 0.01) {
+        lumGrid[i] = 1 - lumGrid[i];
+      }
     }
   }
 
@@ -304,6 +312,7 @@ const lightnessVal = document.getElementById("lightnessVal");
 const resSlider = document.getElementById("resSlider");
 const resVal = document.getElementById("resVal");
 const ditherCheck = document.getElementById("ditherCheck");
+const invertCheck = document.getElementById("invertCheck");
 const previewMode = document.getElementById("previewMode");
 const copyBtn = document.getElementById("copyBtn");
 const saveBtn = document.getElementById("saveBtn");
@@ -365,6 +374,7 @@ function render() {
   const contrast = parseInt(contrastSlider.value) / 100;
   const lightness = parseInt(lightnessSlider.value) / 100;
   const dither = ditherCheck.checked;
+  const invert = invertCheck.checked;
   const mode = previewMode.value;
 
   const outputRows = Math.round((sourceImg.height / sourceImg.width) * outputCols * CELL_ASPECT);
@@ -386,7 +396,7 @@ function render() {
   const imgData = ctx.getImageData(0, 0, renderW, renderH).data;
 
   const t0 = performance.now();
-  lastArt = convertImage(imgData, renderW, renderH, rawImgData, uniqueGlyphs, outputCols, outputRows, contrast, lightness, dither);
+  lastArt = convertImage(imgData, renderW, renderH, rawImgData, uniqueGlyphs, outputCols, outputRows, contrast, lightness, invert, dither);
   const elapsed = (performance.now() - t0).toFixed(0);
 
   if (mode === "pre") {
@@ -494,6 +504,7 @@ resSlider.addEventListener("input", () => {
 });
 
 ditherCheck.addEventListener("change", scheduleRender);
+invertCheck.addEventListener("change", scheduleRender);
 previewMode.addEventListener("change", render); // no re-render needed, just re-display
 
 copyBtn.addEventListener("click", async () => {
