@@ -14,7 +14,7 @@ const GRID_ROWS = 8; // sub-cell grid rows
 const MEASURE_SCALE = 8;
 const MEASURE_W = GRID_COLS * MEASURE_SCALE; // 32 px
 const MEASURE_H = GRID_ROWS * MEASURE_SCALE; // 64 px
-const MEASURE_FONT = `${MEASURE_H}px monospace`;
+const MEASURE_FONT = `${MEASURE_H}px "SauceCodePro Nerd Font Mono", monospace`;
 
 // Terminal cell aspect ratio (width:height).
 const CELL_ASPECT = 0.5;
