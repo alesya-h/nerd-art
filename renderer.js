@@ -4,6 +4,7 @@ const { ipcRenderer } = require("electron");
 const params = new URLSearchParams(location.search);
 const OUTPUT_COLS = parseInt(params.get("cols")) || 80;
 const DITHER = params.get("dither") !== "false";
+const CONTRAST = parseFloat(params.get("contrast")) || 0;  // -1 to +1 (0 = no change)
 const IMAGE_PATH = decodeURIComponent(params.get("image"));
 
 const GRID_COLS = 4; // sub-cell grid columns
@@ -163,6 +164,17 @@ function convertImage(imgData, imgW, imgH, measuredGlyphs, outputCols, outputRow
       const idx = (sy * imgW + sx) * 4;
       const lum = (imgData[idx] * 0.299 + imgData[idx+1] * 0.587 + imgData[idx+2] * 0.114) / 255;
       lumGrid[y * totalGridW + x] = 1 - lum; // invert: 1=dark, 0=bright
+    }
+  }
+
+  // Apply contrast adjustment: remap values around 0.5 midpoint.
+  // contrast > 0 pushes values away from 0.5 (more black/white),
+  // contrast < 0 pulls values toward 0.5 (flatter).
+  if (CONTRAST !== 0) {
+    // Factor: contrast=1 → factor≈5 (strong), contrast=0.5 → factor≈2
+    const factor = (1 + CONTRAST) / (1 - Math.min(CONTRAST, 0.99));
+    for (let i = 0; i < lumGrid.length; i++) {
+      lumGrid[i] = Math.max(0, Math.min(1, factor * (lumGrid[i] - 0.5) + 0.5));
     }
   }
 

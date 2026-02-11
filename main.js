@@ -13,6 +13,8 @@ if (!imagePath) {
 
 const targetWidth = parseInt(args[1]) || 80;
 const dither = !process.argv.includes("--no-dither");
+const contrastArg = process.argv.find(a => a.startsWith("--contrast="));
+const contrast = contrastArg ? parseFloat(contrastArg.split("=")[1]) : 0;
 const absPath = path.resolve(imagePath);
 
 app.whenReady().then(() => {
@@ -38,6 +40,6 @@ app.whenReady().then(() => {
   });
 
   const htmlPath = path.join(__dirname, "renderer.html");
-  const query = `?cols=${targetWidth}&dither=${dither}&image=${encodeURIComponent(absPath)}`;
+  const query = `?cols=${targetWidth}&dither=${dither}&contrast=${contrast}&image=${encodeURIComponent(absPath)}`;
   win.loadFile(htmlPath, { search: query });
 });

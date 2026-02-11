@@ -2,7 +2,8 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: nerd-art <image-path> [width] [--preview output.png] [--no-dither]" >&2
+  echo "Usage: nerd-art <image-path> [width] [--preview output.png] [--no-dither] [--contrast=N]" >&2
+  echo "  --contrast=N   Adjust contrast (-1 to 1, 0=none, default 0)" >&2
   exit 1
 }
 
@@ -22,6 +23,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-dither)
       EXTRA_ARGS+=("--no-dither")
+      ;;
+    --contrast=*)
+      EXTRA_ARGS+=("$1")
       ;;
     -*)
       echo "Unknown option: $1" >&2; usage
