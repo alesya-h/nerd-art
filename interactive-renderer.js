@@ -8,13 +8,16 @@ if (IS_ELECTRON) {
 const params = new URLSearchParams(location.search);
 const IMAGE_PATH = params.get("image") ? decodeURIComponent(params.get("image")) : null;
 
-const GRID_COLS = 4;
-const GRID_ROWS = 8;
-const MEASURE_SCALE = 8;
-const MEASURE_W = GRID_COLS * MEASURE_SCALE;
-const MEASURE_H = GRID_ROWS * MEASURE_SCALE;
-const MEASURE_FONT = `${MEASURE_H}px "SauceCodePro Nerd Font Mono", monospace`;
+// Grid resolution: how many sub-cells per character.
+// Configurable at runtime; changing requires re-measurement.
+let GRID_COLS = 4;
+let GRID_ROWS = 8;
+const MEASURE_SCALE = 8; // pixels per sub-cell when measuring
 const CELL_ASPECT = 0.5;
+
+function getMeasureW() { return GRID_COLS * MEASURE_SCALE; }
+function getMeasureH() { return GRID_ROWS * MEASURE_SCALE; }
+function getMeasureFont() { return `${getMeasureH()}px "SauceCodePro Nerd Font Mono", monospace`; }
 
 // ── Glyph catalog — named groups ────────────────────────────────────
 // Each group has: id, label, whether it contains ambiguous-width chars,
@@ -139,22 +142,25 @@ function buildGlyphCatalog(enabledGroups) {
 
 // ── Glyph measurement ───────────────────────────────────────────────
 function measureGlyphs(glyphs) {
+  const mW = getMeasureW();
+  const mH = getMeasureH();
+  const mFont = getMeasureFont();
   const canvas = document.getElementById("glyphCanvas");
-  canvas.width = MEASURE_W;
-  canvas.height = MEASURE_H;
+  canvas.width = mW;
+  canvas.height = mH;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const results = [];
   const samplesPerCell = MEASURE_SCALE * MEASURE_SCALE;
 
   for (const glyph of glyphs) {
     ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, MEASURE_W, MEASURE_H);
+    ctx.fillRect(0, 0, mW, mH);
     ctx.fillStyle = "#000";
-    ctx.font = MEASURE_FONT;
+    ctx.font = mFont;
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(glyph, 0, Math.round(MEASURE_H * 0.8));
+    ctx.fillText(glyph, 0, Math.round(mH * 0.8));
 
-    const pixels = ctx.getImageData(0, 0, MEASURE_W, MEASURE_H).data;
+    const pixels = ctx.getImageData(0, 0, mW, mH).data;
     const grid = new Float32Array(GRID_COLS * GRID_ROWS);
     let totalInk = 0;
 
@@ -164,7 +170,7 @@ function measureGlyphs(glyphs) {
         const x0 = gx * MEASURE_SCALE;
         let sum = 0;
         for (let dy = 0; dy < MEASURE_SCALE; dy++) {
-          const rowOff = (y0 + dy) * MEASURE_W;
+          const rowOff = (y0 + dy) * mW;
           for (let dx = 0; dx < MEASURE_SCALE; dx++) {
             const idx = (rowOff + x0 + dx) * 4;
             const lum = (pixels[idx] * 0.299 + pixels[idx+1] * 0.587 + pixels[idx+2] * 0.114) / 255;
@@ -198,10 +204,12 @@ function deduplicateGlyphs(measured) {
 }
 
 // ── Image → art conversion ──────────────────────────────────────────
-function convertImage(imgData, imgW, imgH, measuredGlyphs, outputCols, outputRows, contrast, lightness, dither) {
+function convertImage(imgData, imgW, imgH, rawImgData, measuredGlyphs, outputCols, outputRows, contrast, lightness, dither) {
   const totalGridW = outputCols * GRID_COLS;
   const totalGridH = outputRows * GRID_ROWS;
   const lumGrid = new Float32Array(totalGridW * totalGridH);
+  // Alpha mask: 0 = fully transparent (should stay empty), 1 = opaque
+  const alphaGrid = new Float32Array(totalGridW * totalGridH);
 
   for (let y = 0; y < totalGridH; y++) {
     for (let x = 0; x < totalGridW; x++) {
@@ -212,6 +220,8 @@ function convertImage(imgData, imgW, imgH, measuredGlyphs, outputCols, outputRow
       const idx = (sy * imgW + sx) * 4;
       const lum = (imgData[idx] * 0.299 + imgData[idx+1] * 0.587 + imgData[idx+2] * 0.114) / 255;
       lumGrid[y * totalGridW + x] = 1 - lum;
+      // Sample alpha from the raw (pre-white-fill) image data
+      alphaGrid[y * totalGridW + x] = rawImgData[idx + 3] / 255;
     }
   }
 
@@ -222,11 +232,13 @@ function convertImage(imgData, imgW, imgH, measuredGlyphs, outputCols, outputRow
     }
   }
 
-  // Lightness: shift ink density up (darker) or down (lighter).
-  // Positive = darker output, negative = lighter output.
+  // Lightness: shift ink density, but only for non-transparent pixels.
+  // Transparent pixels stay at 0 (empty) regardless of lightness.
   if (lightness !== 0) {
     for (let i = 0; i < lumGrid.length; i++) {
-      lumGrid[i] = Math.max(0, Math.min(1, lumGrid[i] + lightness));
+      if (alphaGrid[i] > 0.01) {
+        lumGrid[i] = Math.max(0, Math.min(1, lumGrid[i] + lightness));
+      }
     }
   }
 
@@ -306,6 +318,8 @@ const contrastSlider = document.getElementById("contrastSlider");
 const contrastVal = document.getElementById("contrastVal");
 const lightnessSlider = document.getElementById("lightnessSlider");
 const lightnessVal = document.getElementById("lightnessVal");
+const resSlider = document.getElementById("resSlider");
+const resVal = document.getElementById("resVal");
 const ditherCheck = document.getElementById("ditherCheck");
 const previewMode = document.getElementById("previewMode");
 const copyBtn = document.getElementById("copyBtn");
@@ -369,13 +383,18 @@ function render() {
   imgCanvas.width = renderW;
   imgCanvas.height = renderH;
   const ctx = imgCanvas.getContext("2d", { willReadFrequently: true });
+  // First draw without white fill to capture alpha
+  ctx.clearRect(0, 0, renderW, renderH);
+  ctx.drawImage(sourceImg, 0, 0, renderW, renderH);
+  const rawImgData = ctx.getImageData(0, 0, renderW, renderH).data;
+  // Then draw with white fill for luminance (transparent → white → empty)
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, renderW, renderH);
   ctx.drawImage(sourceImg, 0, 0, renderW, renderH);
   const imgData = ctx.getImageData(0, 0, renderW, renderH).data;
 
   const t0 = performance.now();
-  lastArt = convertImage(imgData, renderW, renderH, uniqueGlyphs, outputCols, outputRows, contrast, lightness, dither);
+  lastArt = convertImage(imgData, renderW, renderH, rawImgData, uniqueGlyphs, outputCols, outputRows, contrast, lightness, dither);
   const elapsed = (performance.now() - t0).toFixed(0);
 
   if (mode === "pre") {
@@ -417,6 +436,15 @@ contrastSlider.addEventListener("input", () => {
 lightnessSlider.addEventListener("input", () => {
   lightnessVal.textContent = (parseInt(lightnessSlider.value) / 100).toFixed(2);
   scheduleRender();
+});
+
+resSlider.addEventListener("input", () => {
+  const rows = parseInt(resSlider.value);
+  const cols = Math.max(1, rows / 2);
+  resVal.textContent = `${cols}×${rows}`;
+  GRID_ROWS = rows;
+  GRID_COLS = cols;
+  scheduleRemeasure();
 });
 
 ditherCheck.addEventListener("change", scheduleRender);
