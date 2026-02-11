@@ -54,6 +54,32 @@
     font-size: 12px;
     margin-left: auto;
   }
+  select {
+    background: #414868;
+    color: #c0caf5;
+    border: 1px solid #565f89;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  #groups {
+    display: flex;
+    gap: 12px;
+    padding: 6px 12px;
+    background: #1f2335;
+    border-bottom: 1px solid #414868;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .group-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .group-toggle input { accent-color: #7aa2f7; }
+  .group-toggle label { cursor: pointer; }
+  .group-toggle .ambiguous { color: #e0af68; font-size: 10px; }
   #artContainer {
     flex: 1;
     overflow: auto;
@@ -70,6 +96,10 @@
     width: 1ch;
     overflow: hidden;
     text-align: center;
+  }
+  #art.pre-mode {
+    white-space: pre;
+    line-height: 1.0;
   }
   #dropOverlay {
     display: none;
@@ -107,10 +137,18 @@
     <label>Dither:</label>
     <input type="checkbox" id="ditherCheck">
   </div>
+  <div class="control">
+    <label>Preview:</label>
+    <select id="previewMode">
+      <option value="span">Fixed grid</option>
+      <option value="pre">Raw pre</option>
+    </select>
+  </div>
   <button id="copyBtn">Copy text</button>
   <button id="saveBtn">Save text…</button>
   <span id="status"></span>
 </div>
+<div id="groups"></div>
 
 <div id="artContainer">
   <div id="art">Drop an image or click "Open image…" to start.</div>

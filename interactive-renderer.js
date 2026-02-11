@@ -16,21 +16,124 @@ const MEASURE_H = GRID_ROWS * MEASURE_SCALE;
 const MEASURE_FONT = `${MEASURE_H}px "SauceCodePro Nerd Font Mono", monospace`;
 const CELL_ASPECT = 0.5;
 
-// ── Glyph catalog (same as renderer.js) ─────────────────────────────
-function buildGlyphCatalog() {
+// ── Glyph catalog — named groups ────────────────────────────────────
+// Each group has: id, label, whether it contains ambiguous-width chars,
+// whether it's enabled by default, and a function to produce its glyphs.
+const GLYPH_GROUPS = [
+  {
+    id: "blocks", label: "Blocks", ambiguous: false, defaultOn: true,
+    glyphs() {
+      const g = [" ", "\u2588"]; // space + full block
+      for (let i = 0x2581; i <= 0x2587; i++) g.push(String.fromCodePoint(i)); // lower 1/8–7/8
+      for (let i = 0x2589; i <= 0x258F; i++) g.push(String.fromCodePoint(i)); // left 7/8–1/8
+      g.push("\u2580", "\u2584", "\u258C", "\u2590"); // half blocks
+      g.push("\u2594", "\u2595"); // upper/right 1/8
+      return g;
+    }
+  },
+  {
+    id: "quadrants", label: "Quadrants", ambiguous: false, defaultOn: true,
+    glyphs() {
+      const g = [];
+      for (let i = 0x2596; i <= 0x259F; i++) g.push(String.fromCodePoint(i));
+      return g;
+    }
+  },
+  {
+    id: "diagonals", label: "Diagonals", ambiguous: false, defaultOn: true,
+    glyphs() { return ["\u2571", "\u2572", "\u2573"]; } // ╱╲╳
+  },
+  {
+    id: "braille", label: "Braille", ambiguous: "width",
+    note: "Width doesn't mix well with other characters in some environments",
+    defaultOn: false,
+    glyphs() {
+      const g = [];
+      for (let i = 0x2800; i <= 0x28FF; i++) g.push(String.fromCodePoint(i));
+      return g;
+    }
+  },
+  {
+    id: "triangles", label: "Triangles", ambiguous: "width",
+    note: "Grossly unsafe width in pre mode",
+    defaultOn: false,
+    glyphs() { return ["\u25E2", "\u25E3", "\u25E4", "\u25E5"]; } // ◢◣◤◥
+  },
+  {
+    id: "sextants", label: "Sextants", ambiguous: false, defaultOn: true,
+    glyphs() {
+      const g = [];
+      for (let i = 0x1FB00; i <= 0x1FB3B; i++) g.push(String.fromCodePoint(i));
+      return g;
+    }
+  },
+  {
+    id: "wedges", label: "Wedges", ambiguous: false, defaultOn: true,
+    glyphs() {
+      const g = [];
+      for (let i = 0x1FB3C; i <= 0x1FB6F; i++) g.push(String.fromCodePoint(i));
+      return g;
+    }
+  },
+  {
+    id: "ascii_punct", label: "ASCII punctuation", ambiguous: false, defaultOn: true,
+    glyphs() {
+      const g = [];
+      for (let i = 0x21; i <= 0x7E; i++) {
+        const c = String.fromCharCode(i);
+        if (!((i >= 0x41 && i <= 0x5A) || (i >= 0x61 && i <= 0x7A))) g.push(c); // skip letters
+      }
+      return g;
+    }
+  },
+  {
+    id: "ascii_letters", label: "ASCII letters", ambiguous: false, defaultOn: false,
+    glyphs() {
+      const g = [];
+      for (let i = 0x41; i <= 0x5A; i++) g.push(String.fromCharCode(i)); // A-Z
+      for (let i = 0x61; i <= 0x7A; i++) g.push(String.fromCharCode(i)); // a-z
+      return g;
+    }
+  },
+  {
+    id: "geometric", label: "Geometric shapes", ambiguous: "width",
+    note: "Grossly unsafe width — many characters render double-wide",
+    defaultOn: false,
+    glyphs() {
+      const g = [];
+      for (let i = 0x25A0; i <= 0x25FF; i++) {
+        if (i >= 0x25E2 && i <= 0x25E5) continue; // skip — already in Triangles group
+        g.push(String.fromCodePoint(i));
+      }
+      return g;
+    }
+  },
+  {
+    id: "legacy_blocks", label: "Legacy block combos", ambiguous: false, defaultOn: true,
+    glyphs() {
+      const g = [];
+      for (let i = 0x1FB70; i <= 0x1FB9F; i++) {
+        if (i === 0x1FB93) continue; // unassigned codepoint — renders as missing glyph
+        g.push(String.fromCodePoint(i));
+      }
+      return g;
+    }
+  },
+  {
+    id: "shades", label: "Shades ░▒▓", ambiguous: false, defaultOn: false,
+    glyphs() { return ["\u2591", "\u2592", "\u2593"]; }
+  },
+];
+
+function buildGlyphCatalog(enabledGroups) {
   const glyphs = [];
-  glyphs.push(" ");
-  glyphs.push("\u2588");
-  for (let i = 0x2581; i <= 0x2587; i++) glyphs.push(String.fromCodePoint(i));
-  for (let i = 0x2589; i <= 0x258F; i++) glyphs.push(String.fromCodePoint(i));
-  glyphs.push("\u2580", "\u2584", "\u258C", "\u2590");
-  glyphs.push("\u2594", "\u2595");
-  for (let i = 0x2596; i <= 0x259F; i++) glyphs.push(String.fromCodePoint(i));
-  glyphs.push("\u2571", "\u2572", "\u2573");
-  for (let i = 0x2800; i <= 0x28FF; i++) glyphs.push(String.fromCodePoint(i));
-  glyphs.push("\u25E2", "\u25E3", "\u25E4", "\u25E5");
-  for (let i = 0x1FB00; i <= 0x1FB3B; i++) glyphs.push(String.fromCodePoint(i));
-  for (let i = 0x1FB3C; i <= 0x1FB6F; i++) glyphs.push(String.fromCodePoint(i));
+  const seen = new Set();
+  for (const group of GLYPH_GROUPS) {
+    if (!enabledGroups.has(group.id)) continue;
+    for (const g of group.glyphs()) {
+      if (!seen.has(g)) { seen.add(g); glyphs.push(g); }
+    }
+  }
   return glyphs;
 }
 
@@ -184,6 +287,8 @@ let uniqueGlyphs = null;
 let sourceImg = null;
 let lastArt = "";
 let renderTimer = null;
+let remeasureTimer = null;
+let enabledGroups = new Set(GLYPH_GROUPS.filter(g => g.defaultOn).map(g => g.id));
 
 const artEl = document.getElementById("art");
 const statusEl = document.getElementById("status");
@@ -192,8 +297,50 @@ const widthVal = document.getElementById("widthVal");
 const contrastSlider = document.getElementById("contrastSlider");
 const contrastVal = document.getElementById("contrastVal");
 const ditherCheck = document.getElementById("ditherCheck");
+const previewMode = document.getElementById("previewMode");
 const copyBtn = document.getElementById("copyBtn");
 const saveBtn = document.getElementById("saveBtn");
+const groupsEl = document.getElementById("groups");
+
+// ── Build group checkboxes ──────────────────────────────────────────
+for (const group of GLYPH_GROUPS) {
+  const div = document.createElement("div");
+  div.className = "group-toggle";
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.id = "group_" + group.id;
+  cb.checked = group.defaultOn;
+  cb.addEventListener("change", () => {
+    if (cb.checked) enabledGroups.add(group.id);
+    else enabledGroups.delete(group.id);
+    scheduleRemeasure();
+  });
+
+  const lbl = document.createElement("label");
+  lbl.htmlFor = cb.id;
+  lbl.textContent = group.label;
+
+  div.appendChild(cb);
+  div.appendChild(lbl);
+
+  if (group.ambiguous) {
+    const badge = document.createElement("span");
+    badge.className = "ambiguous";
+    badge.textContent = "(width⚠)";
+    badge.title = group.note || "Width issues in some environments";
+    div.appendChild(badge);
+  }
+
+  groupsEl.appendChild(div);
+}
+
+function remeasure() {
+  const catalog = buildGlyphCatalog(enabledGroups);
+  const measured = measureGlyphs(catalog);
+  uniqueGlyphs = deduplicateGlyphs(measured);
+  render();
+}
 
 function render() {
   if (!uniqueGlyphs || !sourceImg) return;
@@ -201,6 +348,7 @@ function render() {
   const outputCols = parseInt(widthSlider.value);
   const contrast = parseInt(contrastSlider.value) / 100;
   const dither = ditherCheck.checked;
+  const mode = previewMode.value;
 
   const outputRows = Math.round((sourceImg.height / sourceImg.width) * outputCols * CELL_ASPECT);
 
@@ -219,20 +367,29 @@ function render() {
   lastArt = convertImage(imgData, renderW, renderH, uniqueGlyphs, outputCols, outputRows, contrast, dither);
   const elapsed = (performance.now() - t0).toFixed(0);
 
-  // Render as fixed-width grid: each char in a 1ch-wide span
-  // to prevent ambiguous-width Unicode from breaking alignment.
-  const htmlLines = lastArt.split("\n").map(line => {
-    const chars = [...line];
-    const spans = chars.map(c => `<span>${c === "&" ? "&amp;" : c === "<" ? "&lt;" : c}</span>`).join("");
-    return `<div class="art-line">${spans}</div>`;
-  });
-  artEl.innerHTML = htmlLines.join("");
+  if (mode === "pre") {
+    artEl.className = "pre-mode";
+    artEl.textContent = lastArt;
+  } else {
+    artEl.className = "";
+    const htmlLines = lastArt.split("\n").map(line => {
+      const chars = [...line];
+      const spans = chars.map(c => `<span>${c === "&" ? "&amp;" : c === "<" ? "&lt;" : c}</span>`).join("");
+      return `<div class="art-line">${spans}</div>`;
+    });
+    artEl.innerHTML = htmlLines.join("");
+  }
   statusEl.textContent = `${outputCols}×${outputRows} | ${uniqueGlyphs.length} glyphs | ${elapsed}ms`;
 }
 
 function scheduleRender() {
   if (renderTimer) clearTimeout(renderTimer);
   renderTimer = setTimeout(render, 50);
+}
+
+function scheduleRemeasure() {
+  if (remeasureTimer) clearTimeout(remeasureTimer);
+  remeasureTimer = setTimeout(remeasure, 100);
 }
 
 // ── Controls ────────────────────────────────────────────────────────
@@ -247,6 +404,7 @@ contrastSlider.addEventListener("input", () => {
 });
 
 ditherCheck.addEventListener("change", scheduleRender);
+previewMode.addEventListener("change", render); // no re-render needed, just re-display
 
 copyBtn.addEventListener("click", async () => {
   if (IS_ELECTRON) {
@@ -298,7 +456,7 @@ window.loadImageFromFile = loadImageFromFile;
 function init() {
   statusEl.textContent = "Measuring glyphs…";
 
-  const catalog = buildGlyphCatalog();
+  const catalog = buildGlyphCatalog(enabledGroups);
   const measured = measureGlyphs(catalog);
   uniqueGlyphs = deduplicateGlyphs(measured);
 
