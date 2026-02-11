@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#1a1b26">
+<canvas id="c"></canvas>
+<script>
+const { ipcRenderer } = require("electron");
+
+const params = new URLSearchParams(location.search);
+const textFile = decodeURIComponent(params.get("file"));
+const outputPng = decodeURIComponent(params.get("output"));
+const fontSize = parseInt(params.get("size")) || 14;
+
+const fs = require("fs");
+const text = fs.readFileSync(textFile, "utf-8");
+const lines = text.split("\n").filter(l => l.length > 0);
+
+const font = fontSize + 'px "SauceCodePro Nerd Font Mono", monospace';
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+ctx.font = font;
+
+// Measure cell size from a reference character
+const cellW = Math.ceil(ctx.measureText("M").width);
+const cellH = Math.ceil(fontSize * 1.2);
+
+const maxCols = Math.max(...lines.map(l => [...l].length));
+canvas.width = maxCols * cellW + 4;
+canvas.height = lines.length * cellH + 4;
+
+// Redraw after resize
+ctx.fillStyle = "#1a1b26";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+ctx.fillStyle = "#c0caf5";
+ctx.font = font;
+ctx.textBaseline = "top";
+for (let i = 0; i < lines.length; i++) {
+  const chars = [...lines[i]];
+  for (let j = 0; j < chars.length; j++) {
+    ctx.fillText(chars[j], 2 + j * cellW, 2 + i * cellH);
+  }
+}
+
+canvas.toBlob(blob => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    fs.writeFileSync(outputPng, Buffer.from(reader.result));
+    ipcRenderer.send("done");
+  };
+  reader.readAsArrayBuffer(blob);
+}, "image/png");
+</script>
+</body></html>

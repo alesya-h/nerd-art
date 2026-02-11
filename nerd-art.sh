@@ -50,12 +50,7 @@ echo "$ART"
 
 if [[ -n "$PREVIEW" ]]; then
   echo "$ART" > /tmp/_nerd_art_preview.txt
-  pango-view -q \
-    --font="SauceCodePro Nerd Font Mono 12" \
-    --background="#1a1b26" \
-    --foreground="#c0caf5" \
-    -o "$PREVIEW" \
-    /tmp/_nerd_art_preview.txt
+  electron "$SCRIPT_DIR/preview.js" /tmp/_nerd_art_preview.txt "$PREVIEW" 2>/dev/null
   rm -f /tmp/_nerd_art_preview.txt
   echo "[nerd-art] Preview saved to $PREVIEW" >&2
 fi
