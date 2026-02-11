@@ -38,10 +38,8 @@ function buildGlyphCatalog() {
   // Space (empty)
   glyphs.push(" ");
 
-  // Block elements - shade characters
-  glyphs.push("\\u2591"); // ░ light shade
-  glyphs.push("\\u2592"); // ▒ medium shade
-  glyphs.push("\\u2593"); // ▓ dark shade
+  // Full block only (shades ░▒▓ removed — they create flat gray bands
+  // that suppress spatial detail from sextants/braille/wedges)
   glyphs.push("\\u2588"); // █ full block
 
   // Block elements - vertical fractional blocks (lower N/8)
