@@ -302,6 +302,9 @@ async function main() {
       imgCanvas.width = renderW;
       imgCanvas.height = renderH;
       const ctx = imgCanvas.getContext("2d", { willReadFrequently: true });
+      // Fill with white first so transparent pixels = white = empty (no ink)
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, renderW, renderH);
       ctx.drawImage(img, 0, 0, renderW, renderH);
       const imgData = ctx.getImageData(0, 0, renderW, renderH).data;
 
