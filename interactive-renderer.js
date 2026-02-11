@@ -198,7 +198,7 @@ function deduplicateGlyphs(measured) {
 }
 
 // ── Image → art conversion ──────────────────────────────────────────
-function convertImage(imgData, imgW, imgH, measuredGlyphs, outputCols, outputRows, contrast, dither) {
+function convertImage(imgData, imgW, imgH, measuredGlyphs, outputCols, outputRows, contrast, lightness, dither) {
   const totalGridW = outputCols * GRID_COLS;
   const totalGridH = outputRows * GRID_ROWS;
   const lumGrid = new Float32Array(totalGridW * totalGridH);
@@ -219,6 +219,14 @@ function convertImage(imgData, imgW, imgH, measuredGlyphs, outputCols, outputRow
     const factor = (1 + contrast) / (1 - Math.min(contrast, 0.99));
     for (let i = 0; i < lumGrid.length; i++) {
       lumGrid[i] = Math.max(0, Math.min(1, factor * (lumGrid[i] - 0.5) + 0.5));
+    }
+  }
+
+  // Lightness: shift ink density up (darker) or down (lighter).
+  // Positive = darker output, negative = lighter output.
+  if (lightness !== 0) {
+    for (let i = 0; i < lumGrid.length; i++) {
+      lumGrid[i] = Math.max(0, Math.min(1, lumGrid[i] + lightness));
     }
   }
 
@@ -296,6 +304,8 @@ const widthSlider = document.getElementById("widthSlider");
 const widthVal = document.getElementById("widthVal");
 const contrastSlider = document.getElementById("contrastSlider");
 const contrastVal = document.getElementById("contrastVal");
+const lightnessSlider = document.getElementById("lightnessSlider");
+const lightnessVal = document.getElementById("lightnessVal");
 const ditherCheck = document.getElementById("ditherCheck");
 const previewMode = document.getElementById("previewMode");
 const copyBtn = document.getElementById("copyBtn");
@@ -347,6 +357,7 @@ function render() {
 
   const outputCols = parseInt(widthSlider.value);
   const contrast = parseInt(contrastSlider.value) / 100;
+  const lightness = parseInt(lightnessSlider.value) / 100;
   const dither = ditherCheck.checked;
   const mode = previewMode.value;
 
@@ -364,7 +375,7 @@ function render() {
   const imgData = ctx.getImageData(0, 0, renderW, renderH).data;
 
   const t0 = performance.now();
-  lastArt = convertImage(imgData, renderW, renderH, uniqueGlyphs, outputCols, outputRows, contrast, dither);
+  lastArt = convertImage(imgData, renderW, renderH, uniqueGlyphs, outputCols, outputRows, contrast, lightness, dither);
   const elapsed = (performance.now() - t0).toFixed(0);
 
   if (mode === "pre") {
@@ -400,6 +411,11 @@ widthSlider.addEventListener("input", () => {
 
 contrastSlider.addEventListener("input", () => {
   contrastVal.textContent = (parseInt(contrastSlider.value) / 100).toFixed(2);
+  scheduleRender();
+});
+
+lightnessSlider.addEventListener("input", () => {
+  lightnessVal.textContent = (parseInt(lightnessSlider.value) / 100).toFixed(2);
   scheduleRender();
 });
 
