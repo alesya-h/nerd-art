@@ -1,0 +1,279 @@
+const { ipcRenderer } = require("electron");
+const { clipboard } = require("electron");
+const fs = require("fs");
+
+// ── Config from query params ────────────────────────────────────────
+const params = new URLSearchParams(location.search);
+const IMAGE_PATH = decodeURIComponent(params.get("image"));
+
+const GRID_COLS = 4;
+const GRID_ROWS = 8;
+const MEASURE_SCALE = 8;
+const MEASURE_W = GRID_COLS * MEASURE_SCALE;
+const MEASURE_H = GRID_ROWS * MEASURE_SCALE;
+const MEASURE_FONT = `${MEASURE_H}px "SauceCodePro Nerd Font Mono", monospace`;
+const CELL_ASPECT = 0.5;
+
+// ── Glyph catalog (same as renderer.js) ─────────────────────────────
+function buildGlyphCatalog() {
+  const glyphs = [];
+  glyphs.push(" ");
+  glyphs.push("\u2588");
+  for (let i = 0x2581; i <= 0x2587; i++) glyphs.push(String.fromCodePoint(i));
+  for (let i = 0x2589; i <= 0x258F; i++) glyphs.push(String.fromCodePoint(i));
+  glyphs.push("\u2580", "\u2584", "\u258C", "\u2590");
+  glyphs.push("\u2594", "\u2595");
+  for (let i = 0x2596; i <= 0x259F; i++) glyphs.push(String.fromCodePoint(i));
+  glyphs.push("\u2571", "\u2572", "\u2573");
+  for (let i = 0x2800; i <= 0x28FF; i++) glyphs.push(String.fromCodePoint(i));
+  glyphs.push("\u25E2", "\u25E3", "\u25E4", "\u25E5");
+  for (let i = 0x1FB00; i <= 0x1FB3B; i++) glyphs.push(String.fromCodePoint(i));
+  for (let i = 0x1FB3C; i <= 0x1FB6F; i++) glyphs.push(String.fromCodePoint(i));
+  return glyphs;
+}
+
+// ── Glyph measurement ───────────────────────────────────────────────
+function measureGlyphs(glyphs) {
+  const canvas = document.getElementById("glyphCanvas");
+  canvas.width = MEASURE_W;
+  canvas.height = MEASURE_H;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const results = [];
+  const samplesPerCell = MEASURE_SCALE * MEASURE_SCALE;
+
+  for (const glyph of glyphs) {
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, MEASURE_W, MEASURE_H);
+    ctx.fillStyle = "#000";
+    ctx.font = MEASURE_FONT;
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(glyph, 0, Math.round(MEASURE_H * 0.8));
+
+    const pixels = ctx.getImageData(0, 0, MEASURE_W, MEASURE_H).data;
+    const grid = new Float32Array(GRID_COLS * GRID_ROWS);
+    let totalInk = 0;
+
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      const y0 = gy * MEASURE_SCALE;
+      for (let gx = 0; gx < GRID_COLS; gx++) {
+        const x0 = gx * MEASURE_SCALE;
+        let sum = 0;
+        for (let dy = 0; dy < MEASURE_SCALE; dy++) {
+          const rowOff = (y0 + dy) * MEASURE_W;
+          for (let dx = 0; dx < MEASURE_SCALE; dx++) {
+            const idx = (rowOff + x0 + dx) * 4;
+            const lum = (pixels[idx] * 0.299 + pixels[idx+1] * 0.587 + pixels[idx+2] * 0.114) / 255;
+            sum += 1 - lum;
+          }
+        }
+        const density = sum / samplesPerCell;
+        grid[gy * GRID_COLS + gx] = density;
+        totalInk += density;
+      }
+    }
+
+    const avgDensity = totalInk / (GRID_COLS * GRID_ROWS);
+    if (avgDensity < 0.001 && glyph !== " ") continue;
+    results.push({ glyph, grid, density: avgDensity });
+  }
+
+  return results;
+}
+
+// ── Deduplicate ─────────────────────────────────────────────────────
+function deduplicateGlyphs(measured) {
+  const seen = new Map();
+  for (const m of measured) {
+    const key = Array.from(m.grid).map(v => v.toFixed(3)).join(",");
+    if (!seen.has(key) || m.glyph.length < seen.get(key).glyph.length) {
+      seen.set(key, m);
+    }
+  }
+  return Array.from(seen.values());
+}
+
+// ── Image → art conversion ──────────────────────────────────────────
+function convertImage(imgData, imgW, imgH, measuredGlyphs, outputCols, outputRows, contrast, dither) {
+  const totalGridW = outputCols * GRID_COLS;
+  const totalGridH = outputRows * GRID_ROWS;
+  const lumGrid = new Float32Array(totalGridW * totalGridH);
+
+  for (let y = 0; y < totalGridH; y++) {
+    for (let x = 0; x < totalGridW; x++) {
+      const srcX = (x / totalGridW) * imgW;
+      const srcY = (y / totalGridH) * imgH;
+      const sx = Math.min(Math.floor(srcX), imgW - 1);
+      const sy = Math.min(Math.floor(srcY), imgH - 1);
+      const idx = (sy * imgW + sx) * 4;
+      const lum = (imgData[idx] * 0.299 + imgData[idx+1] * 0.587 + imgData[idx+2] * 0.114) / 255;
+      lumGrid[y * totalGridW + x] = 1 - lum;
+    }
+  }
+
+  if (contrast !== 0) {
+    const factor = (1 + contrast) / (1 - Math.min(contrast, 0.99));
+    for (let i = 0; i < lumGrid.length; i++) {
+      lumGrid[i] = Math.max(0, Math.min(1, factor * (lumGrid[i] - 0.5) + 0.5));
+    }
+  }
+
+  const gridSize = GRID_COLS * GRID_ROWS;
+  const lines = [];
+
+  for (let row = 0; row < outputRows; row++) {
+    let line = "";
+    for (let col = 0; col < outputCols; col++) {
+      const cellGrid = new Float32Array(gridSize);
+      for (let gy = 0; gy < GRID_ROWS; gy++) {
+        for (let gx = 0; gx < GRID_COLS; gx++) {
+          cellGrid[gy * GRID_COLS + gx] = lumGrid[(row * GRID_ROWS + gy) * totalGridW + col * GRID_COLS + gx];
+        }
+      }
+
+      let bestGlyph = " ";
+      let bestError = Infinity;
+      for (const mg of measuredGlyphs) {
+        let error = 0;
+        for (let i = 0; i < gridSize; i++) {
+          const diff = cellGrid[i] - mg.grid[i];
+          error += diff * diff;
+        }
+        error /= gridSize;
+        if (error < bestError) {
+          bestError = error;
+          bestGlyph = mg.glyph;
+        }
+      }
+
+      line += bestGlyph;
+
+      if (dither) {
+        const matched = measuredGlyphs.find(m => m.glyph === bestGlyph);
+        if (matched) {
+          for (let gy = 0; gy < GRID_ROWS; gy++) {
+            for (let gx = 0; gx < GRID_COLS; gx++) {
+              const desired = cellGrid[gy * GRID_COLS + gx];
+              const actual = matched.grid[gy * GRID_COLS + gx];
+              const err = desired - actual;
+              const rx = col * GRID_COLS + gx + 1;
+              const ry = row * GRID_ROWS + gy;
+              if (rx < totalGridW) lumGrid[ry * totalGridW + rx] += err * 7 / 16;
+              const blx = col * GRID_COLS + gx - 1;
+              const bly = row * GRID_ROWS + gy + 1;
+              if (blx >= 0 && bly < totalGridH) lumGrid[bly * totalGridW + blx] += err * 3 / 16;
+              const bx = col * GRID_COLS + gx;
+              const by = row * GRID_ROWS + gy + 1;
+              if (by < totalGridH) lumGrid[by * totalGridW + bx] += err * 5 / 16;
+              const brx = col * GRID_COLS + gx + 1;
+              const bry = row * GRID_ROWS + gy + 1;
+              if (brx < totalGridW && bry < totalGridH) lumGrid[bry * totalGridW + brx] += err * 1 / 16;
+            }
+          }
+        }
+      }
+    }
+    lines.push(line);
+  }
+  return lines.join("\n");
+}
+
+// ── State ───────────────────────────────────────────────────────────
+let uniqueGlyphs = null;
+let sourceImg = null;
+let lastArt = "";
+let renderTimer = null;
+
+const artEl = document.getElementById("art");
+const statusEl = document.getElementById("status");
+const widthSlider = document.getElementById("widthSlider");
+const widthVal = document.getElementById("widthVal");
+const contrastSlider = document.getElementById("contrastSlider");
+const contrastVal = document.getElementById("contrastVal");
+const ditherCheck = document.getElementById("ditherCheck");
+const copyBtn = document.getElementById("copyBtn");
+const saveBtn = document.getElementById("saveBtn");
+
+function render() {
+  if (!uniqueGlyphs || !sourceImg) return;
+
+  const outputCols = parseInt(widthSlider.value);
+  const contrast = parseInt(contrastSlider.value) / 100;
+  const dither = ditherCheck.checked;
+
+  const outputRows = Math.round((sourceImg.height / sourceImg.width) * outputCols * CELL_ASPECT);
+
+  const imgCanvas = document.getElementById("imgCanvas");
+  const renderW = outputCols * GRID_COLS;
+  const renderH = outputRows * GRID_ROWS;
+  imgCanvas.width = renderW;
+  imgCanvas.height = renderH;
+  const ctx = imgCanvas.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, renderW, renderH);
+  ctx.drawImage(sourceImg, 0, 0, renderW, renderH);
+  const imgData = ctx.getImageData(0, 0, renderW, renderH).data;
+
+  const t0 = performance.now();
+  lastArt = convertImage(imgData, renderW, renderH, uniqueGlyphs, outputCols, outputRows, contrast, dither);
+  const elapsed = (performance.now() - t0).toFixed(0);
+
+  // Render as fixed-width grid: each char in a 1ch-wide span
+  // to prevent ambiguous-width Unicode from breaking alignment.
+  const htmlLines = lastArt.split("\n").map(line => {
+    const chars = [...line];
+    const spans = chars.map(c => `<span>${c === "&" ? "&amp;" : c === "<" ? "&lt;" : c}</span>`).join("");
+    return `<div class="art-line">${spans}</div>`;
+  });
+  artEl.innerHTML = htmlLines.join("");
+  statusEl.textContent = `${outputCols}×${outputRows} | ${uniqueGlyphs.length} glyphs | ${elapsed}ms`;
+}
+
+function scheduleRender() {
+  if (renderTimer) clearTimeout(renderTimer);
+  renderTimer = setTimeout(render, 50);
+}
+
+// ── Controls ────────────────────────────────────────────────────────
+widthSlider.addEventListener("input", () => {
+  widthVal.textContent = widthSlider.value;
+  scheduleRender();
+});
+
+contrastSlider.addEventListener("input", () => {
+  contrastVal.textContent = (parseInt(contrastSlider.value) / 100).toFixed(2);
+  scheduleRender();
+});
+
+ditherCheck.addEventListener("change", scheduleRender);
+
+copyBtn.addEventListener("click", () => {
+  clipboard.writeText(lastArt);
+  statusEl.textContent = "Copied to clipboard!";
+});
+
+saveBtn.addEventListener("click", () => {
+  ipcRenderer.send("save-dialog", lastArt);
+});
+
+// ── Init ────────────────────────────────────────────────────────────
+async function init() {
+  statusEl.textContent = "Measuring glyphs…";
+
+  const catalog = buildGlyphCatalog();
+  const measured = measureGlyphs(catalog);
+  uniqueGlyphs = deduplicateGlyphs(measured);
+
+  statusEl.textContent = `${uniqueGlyphs.length} glyphs measured. Loading image…`;
+
+  sourceImg = new Image();
+  sourceImg.onload = () => {
+    statusEl.textContent = "Ready";
+    render();
+  };
+  sourceImg.onerror = () => {
+    statusEl.textContent = "Failed to load image: " + IMAGE_PATH;
+  };
+  sourceImg.src = "file://" + IMAGE_PATH;
+}
+
+init();

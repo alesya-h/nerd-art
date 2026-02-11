@@ -2,8 +2,9 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: nerd-art <image-path> [width] [--preview output.png] [--no-dither] [--contrast=N]" >&2
+  echo "Usage: nerd-art <image-path> [width] [--preview output.png] [--no-dither] [--contrast=N] [--interactive]" >&2
   echo "  --contrast=N   Adjust contrast (-1 to 1, 0=none, default 0)" >&2
+  echo "  --interactive  Open interactive UI with live controls" >&2
   exit 1
 }
 
@@ -12,6 +13,7 @@ if [[ $# -lt 1 ]]; then usage; fi
 IMAGE=""
 WIDTH=""
 PREVIEW=""
+INTERACTIVE=false
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -26,6 +28,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --contrast=*)
       EXTRA_ARGS+=("$1")
+      ;;
+    --interactive)
+      INTERACTIVE=true
       ;;
     -*)
       echo "Unknown option: $1" >&2; usage
@@ -46,6 +51,11 @@ done
 [[ -n "$IMAGE" ]] || usage
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [[ "$INTERACTIVE" == true ]]; then
+  exec electron "$SCRIPT_DIR/interactive.js" "$IMAGE"
+fi
+
 WIDTH_ARG="${WIDTH:-80}"
 
 ART=$(electron "$SCRIPT_DIR/main.js" "$IMAGE" "$WIDTH_ARG" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}" 2>/dev/null)
