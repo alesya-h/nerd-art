@@ -56,12 +56,7 @@ const GLYPH_GROUPS = [
       return g;
     }
   },
-  {
-    id: "triangles", label: "Triangles", ambiguous: "width",
-    note: "Grossly unsafe width in pre mode",
-    defaultOn: false,
-    glyphs() { return ["\u25E2", "\u25E3", "\u25E4", "\u25E5"]; } // ◢◣◤◥
-  },
+
   {
     id: "sextants", label: "Sextants", ambiguous: false, defaultOn: true,
     glyphs() {
@@ -98,19 +93,7 @@ const GLYPH_GROUPS = [
       return g;
     }
   },
-  {
-    id: "geometric", label: "Geometric shapes", ambiguous: "width",
-    note: "Grossly unsafe width — many characters render double-wide",
-    defaultOn: false,
-    glyphs() {
-      const g = [];
-      for (let i = 0x25A0; i <= 0x25FF; i++) {
-        if (i >= 0x25E2 && i <= 0x25E5) continue; // skip — already in Triangles group
-        g.push(String.fromCodePoint(i));
-      }
-      return g;
-    }
-  },
+
   {
     id: "legacy_blocks", label: "Legacy block combos", ambiguous: false, defaultOn: true,
     glyphs() {
@@ -338,6 +321,7 @@ for (const group of GLYPH_GROUPS) {
   cb.addEventListener("change", () => {
     if (cb.checked) enabledGroups.add(group.id);
     else enabledGroups.delete(group.id);
+    saveGroupState();
     scheduleRemeasure();
   });
 
@@ -358,6 +342,14 @@ for (const group of GLYPH_GROUPS) {
 
   groupsEl.appendChild(div);
 }
+
+// Reset button for groups
+const resetBtn = document.createElement("button");
+resetBtn.textContent = "Reset";
+resetBtn.title = "Reset character groups to defaults";
+resetBtn.style.cssText = "font-size:11px; padding:2px 8px; margin-left:4px;";
+resetBtn.addEventListener("click", resetGroupsToDefault);
+groupsEl.appendChild(resetBtn);
 
 function remeasure() {
   const catalog = buildGlyphCatalog(enabledGroups);
@@ -421,6 +413,60 @@ function scheduleRemeasure() {
   if (remeasureTimer) clearTimeout(remeasureTimer);
   remeasureTimer = setTimeout(remeasure, 100);
 }
+
+// ── Double-click labels to reset sliders to default ─────────────────
+document.querySelectorAll(".control label[data-default]").forEach(label => {
+  label.style.cursor = "pointer";
+  label.title = "Double-click to reset";
+  label.addEventListener("dblclick", () => {
+    const slider = label.parentElement.querySelector("input[type=range]");
+    if (!slider) return;
+    const def = label.dataset.default;
+    slider.value = def;
+    slider.dispatchEvent(new Event("input"));
+  });
+});
+
+// ── localStorage for group checkboxes ───────────────────────────────
+const STORAGE_KEY = "nerd-art-groups";
+
+function saveGroupState() {
+  const state = {};
+  for (const group of GLYPH_GROUPS) {
+    state[group.id] = enabledGroups.has(group.id);
+  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+
+function loadGroupState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const state = JSON.parse(raw);
+    enabledGroups.clear();
+    for (const group of GLYPH_GROUPS) {
+      const on = state[group.id] !== undefined ? state[group.id] : group.defaultOn;
+      if (on) enabledGroups.add(group.id);
+      const cb = document.getElementById("group_" + group.id);
+      if (cb) cb.checked = on;
+    }
+    return true;
+  } catch(e) { return false; }
+}
+
+function resetGroupsToDefault() {
+  enabledGroups.clear();
+  for (const group of GLYPH_GROUPS) {
+    if (group.defaultOn) enabledGroups.add(group.id);
+    const cb = document.getElementById("group_" + group.id);
+    if (cb) cb.checked = group.defaultOn;
+  }
+  saveGroupState();
+  scheduleRemeasure();
+}
+
+// Load saved state
+loadGroupState();
 
 // ── Controls ────────────────────────────────────────────────────────
 widthSlider.addEventListener("input", () => {
