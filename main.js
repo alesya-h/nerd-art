@@ -111,15 +111,17 @@ function buildGlyphCatalog() {
     diaerBelow:   "\\u0324",
     macronBelow:  "\\u0331",
   };
-
+  
   const base = " ";
   // Single combiners
   for (const c of Object.values(COMBINING)) {
     glyphs.push(base + c);
   }
   // Paired combiners (above + below)
-  const aboveMarks = [COMBINING.dotAbove, COMBINING.diaerAbove, COMBINING.overline, COMBINING.macronAbove];
-  const belowMarks = [COMBINING.dotBelow, COMBINING.diaerBelow, COMBINING.underline, COMBINING.macronBelow];
+  const aboveMarks = [COMBINING.dotAbove, COMBINING.diaerAbove, COMBINING.
+  erline, COMBINING.macronAbove];
+  const belowMarks = [COMBINING.dotBelow, COMBINING.diaerBelow, COMBINING.
+  derline, COMBINING.macronBelow];
   for (const a of aboveMarks) {
     for (const b of belowMarks) {
       glyphs.push(base + a + b);
@@ -141,15 +143,6 @@ function buildGlyphCatalog() {
     }
     for (const b of belowMarks) {
       glyphs.push(base + o + b);
-    }
-  }
-
-  // Combining marks on block/shade bases
-  const blockBases = ["\\u2591", "\\u2592", "\\u2593", "\\u2584", "\\u2580"];
-  const keyCombiners = [COMBINING.overline, COMBINING.stroke, COMBINING.underline, COMBINING.dotAbove, COMBINING.dotBelow];
-  for (const bb of blockBases) {
-    for (const c of keyCombiners) {
-      glyphs.push(bb + c);
     }
   }
 
