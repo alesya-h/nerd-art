@@ -1,10 +1,12 @@
-const { ipcRenderer } = require("electron");
-const { clipboard } = require("electron");
-const fs = require("fs");
+// ── Environment detection ────────────────────────────────────────────
+const IS_ELECTRON = typeof process !== "undefined" && process.versions && process.versions.electron;
+let ipcRenderer, clipboard;
+if (IS_ELECTRON) {
+  ({ ipcRenderer, clipboard } = require("electron"));
+}
 
-// ── Config from query params ────────────────────────────────────────
 const params = new URLSearchParams(location.search);
-const IMAGE_PATH = decodeURIComponent(params.get("image"));
+const IMAGE_PATH = params.get("image") ? decodeURIComponent(params.get("image")) : null;
 
 const GRID_COLS = 4;
 const GRID_ROWS = 8;
@@ -246,34 +248,69 @@ contrastSlider.addEventListener("input", () => {
 
 ditherCheck.addEventListener("change", scheduleRender);
 
-copyBtn.addEventListener("click", () => {
-  clipboard.writeText(lastArt);
+copyBtn.addEventListener("click", async () => {
+  if (IS_ELECTRON) {
+    clipboard.writeText(lastArt);
+  } else {
+    await navigator.clipboard.writeText(lastArt);
+  }
   statusEl.textContent = "Copied to clipboard!";
 });
 
 saveBtn.addEventListener("click", () => {
-  ipcRenderer.send("save-dialog", lastArt);
+  if (IS_ELECTRON) {
+    ipcRenderer.send("save-dialog", lastArt);
+  } else {
+    const blob = new Blob([lastArt], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "art.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 });
 
-// ── Init ────────────────────────────────────────────────────────────
-async function init() {
-  statusEl.textContent = "Measuring glyphs…";
-
-  const catalog = buildGlyphCatalog();
-  const measured = measureGlyphs(catalog);
-  uniqueGlyphs = deduplicateGlyphs(measured);
-
-  statusEl.textContent = `${uniqueGlyphs.length} glyphs measured. Loading image…`;
-
+// ── Load image ──────────────────────────────────────────────────────
+function loadImageFromSrc(src) {
+  statusEl.textContent = "Loading image…";
   sourceImg = new Image();
   sourceImg.onload = () => {
     statusEl.textContent = "Ready";
     render();
   };
   sourceImg.onerror = () => {
-    statusEl.textContent = "Failed to load image: " + IMAGE_PATH;
+    statusEl.textContent = "Failed to load image";
   };
-  sourceImg.src = "file://" + IMAGE_PATH;
+  sourceImg.src = src;
+}
+
+// Called from file picker in web mode
+function loadImageFromFile(file) {
+  const url = URL.createObjectURL(file);
+  loadImageFromSrc(url);
+}
+
+// Expose for the HTML file picker
+window.loadImageFromFile = loadImageFromFile;
+
+// ── Init ────────────────────────────────────────────────────────────
+function init() {
+  statusEl.textContent = "Measuring glyphs…";
+
+  const catalog = buildGlyphCatalog();
+  const measured = measureGlyphs(catalog);
+  uniqueGlyphs = deduplicateGlyphs(measured);
+
+  statusEl.textContent = `${uniqueGlyphs.length} glyphs measured.`;
+
+  if (IMAGE_PATH) {
+    // Electron mode: load from file path
+    const prefix = IMAGE_PATH.startsWith("/") ? "file://" : "";
+    loadImageFromSrc(prefix + IMAGE_PATH);
+  } else {
+    statusEl.textContent = `${uniqueGlyphs.length} glyphs measured. Drop an image or use the file picker.`;
+  }
 }
 
 init();
