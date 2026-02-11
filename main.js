@@ -38,11 +38,6 @@ function buildGlyphCatalog() {
   // Space (empty)
   glyphs.push(" ");
 
-  // ASCII density ramp (selected chars with distinct densities)
-  for (const ch of ".\`·:;!|/\\\\(){}i1tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*WM&8B#@%$") {
-    glyphs.push(ch);
-  }
-
   // Block elements - shade characters
   glyphs.push("\\u2591"); // ░ light shade
   glyphs.push("\\u2592"); // ▒ medium shade
@@ -76,13 +71,7 @@ function buildGlyphCatalog() {
   // Braille patterns (all 256)
   for (let i = 0x2800; i <= 0x28FF; i++) glyphs.push(String.fromCodePoint(i));
 
-  // Geometric shapes useful for density
-  glyphs.push("\\u25A0"); // ■ black square
-  glyphs.push("\\u25A1"); // □ white square
-  glyphs.push("\\u25AA"); // ▪ small black square
-  glyphs.push("\\u25CF"); // ● black circle
-  glyphs.push("\\u25CB"); // ○ white circle
-  glyphs.push("\\u25C6"); // ◆ black diamond
+  // Geometric shapes - triangles for diagonal edges
   glyphs.push("\\u25E2"); // ◢ lower right triangle
   glyphs.push("\\u25E3"); // ◣ lower left triangle
   glyphs.push("\\u25E4"); // ◤ upper left triangle
@@ -93,58 +82,6 @@ function buildGlyphCatalog() {
 
   // Legacy computing - diagonal fills/wedges (U+1FB3C-U+1FB6F)
   for (let i = 0x1FB3C; i <= 0x1FB6F; i++) glyphs.push(String.fromCodePoint(i));
-
-  // Combining mark compositions on space
-  // These add density at specific vertical positions within the cell
-  const COMBINING = {
-    overline:     "\\u0305",
-    dblOverline:  "\\u033F",
-    dotAbove:     "\\u0307",
-    diaerAbove:   "\\u0308",
-    macronAbove:  "\\u0304",
-    stroke:       "\\u0336",
-    tildeOverlay: "\\u0334",
-    vertOverlay:  "\\u20D2",
-    underline:    "\\u0332",
-    dblUnderline: "\\u0333",
-    dotBelow:     "\\u0323",
-    diaerBelow:   "\\u0324",
-    macronBelow:  "\\u0331",
-  };
-  
-  const base = " ";
-  // Single combiners
-  for (const c of Object.values(COMBINING)) {
-    glyphs.push(base + c);
-  }
-  // Paired combiners (above + below)
-  const aboveMarks = [COMBINING.dotAbove, COMBINING.diaerAbove, COMBINING.
-  erline, COMBINING.macronAbove];
-  const belowMarks = [COMBINING.dotBelow, COMBINING.diaerBelow, COMBINING.
-  derline, COMBINING.macronBelow];
-  for (const a of aboveMarks) {
-    for (const b of belowMarks) {
-      glyphs.push(base + a + b);
-    }
-  }
-  // Triple combiners (above + overlay + below)
-  const overlayMarks = [COMBINING.stroke, COMBINING.tildeOverlay];
-  for (const a of aboveMarks) {
-    for (const o of overlayMarks) {
-      for (const b of belowMarks) {
-        glyphs.push(base + a + o + b);
-      }
-    }
-  }
-  // Overlay + above/below pairs
-  for (const o of overlayMarks) {
-    for (const a of aboveMarks) {
-      glyphs.push(base + a + o);
-    }
-    for (const b of belowMarks) {
-      glyphs.push(base + o + b);
-    }
-  }
 
   return glyphs;
 }
